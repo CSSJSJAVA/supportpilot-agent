@@ -1,38 +1,26 @@
 import asyncio
-import os
+import sys
+from pathlib import Path
 
-from dotenv import load_dotenv
-from openai import AsyncOpenAI
-from agents import Agent, OpenAIChatCompletionsModel, Runner
 
-load_dotenv()
+SRC_DIR = Path(__file__).parent / "src"
+sys.path.insert(0, str(SRC_DIR))
 
-api_key = os.getenv("DEEPSEEK_API_KEY")
-base_url = os.getenv("DEEPSEEK_BASE_URL")
-model_name = os.getenv("DEEPSEEK_MODEL")
 
-client = AsyncOpenAI(
-    api_key=api_key,
-    base_url=base_url,
-)
+from agents import Runner
 
-model = OpenAIChatCompletionsModel(
-    model=model_name,
-    openai_client=client,
-)
+from supportpilot.agent import create_support_agent
+from supportpilot.db import init_db
 
-agent = Agent(
-    name="SupportPilot",
-    instructions=(
-        "你是 SupportPilot，一名企业客服 AI Agent。"
-        "请用简洁、专业、友好的方式回答用户问题。"
-        "如果你不知道答案，请明确说明，不要编造。"
-    ),
-    model=model,
-)
+
 MAX_HISTORY_MESSAGES = 10
 
+
 async def main():
+    init_db()
+
+    agent = create_support_agent()
+
     print("SupportPilot 已启动。输入 exit 退出。\n")
 
     conversation = []
@@ -50,8 +38,9 @@ async def main():
                 "content": user_input,
             }
         )
+
         if len(conversation) > MAX_HISTORY_MESSAGES:
-                    conversation = conversation[-MAX_HISTORY_MESSAGES:]
+            conversation = conversation[-MAX_HISTORY_MESSAGES:]
 
         result = await Runner.run(
             agent,
@@ -70,8 +59,10 @@ async def main():
                 "content": assistant_output,
             }
         )
+
         if len(conversation) > MAX_HISTORY_MESSAGES:
             conversation = conversation[-MAX_HISTORY_MESSAGES:]
+
 
 if __name__ == "__main__":
     asyncio.run(main())

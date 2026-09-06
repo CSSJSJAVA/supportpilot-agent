@@ -34,3 +34,36 @@ pip install -r requirements.txt
 ```
 
 开发时请根据 `.env.example` 创建本地 `.env` 文件，并填写自己的 API key。不要把真实密钥提交到代码仓库。
+
+## Current Capabilities
+
+- Multi-turn terminal conversation
+- DeepSeek model via OpenAI-compatible API
+- Order lookup
+- Ticket creation
+- Ticket status lookup
+- Ticket status update
+- SQLite business data
+- Tool input validation
+- Basic conversation history limit
+
+## Project Structure
+
+```text
+supportpilot-agent/
+├── run.py
+├── src/
+│   └── supportpilot/
+│       ├── __init__.py
+│       ├── agent.py
+│       ├── config.py
+│       ├── db.py
+│       └── tools/
+│           ├── __init__.py
+│           ├── order_tools.py
+│           └── ticket_tools.py
+├── .env.example
+├── .gitignore
+├── AGENTS.md
+├── README.md
+└── requirements.txt
