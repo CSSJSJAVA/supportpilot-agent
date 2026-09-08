@@ -105,6 +105,29 @@ def init_db():
             ),
         ],
     )
+
+    cursor.execute(
+    """
+    INSERT OR IGNORE INTO orders (
+        order_id,
+        customer_name,
+        product_name,
+        payment_status,
+        shipping_status,
+        estimated_delivery
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+    """,
+    (
+        "A1004",
+        "赵六",
+        "智能手环",
+        "已付款",
+        "等待仓库发货",
+        "预计尽快发货",
+    ),
+)
+    
     cursor.execute(
         """
         UPDATE orders
@@ -128,6 +151,14 @@ def init_db():
         WHERE order_id = 'A1003'
         """
     )
+
+    cursor.execute(
+        """
+        UPDATE orders
+        SET hours_since_payment = 60
+        WHERE order_id = 'A1004'
+         """
+)
 
     conn.commit()
     conn.close()

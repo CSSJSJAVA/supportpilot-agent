@@ -77,6 +77,12 @@ SupportPilot Agent
     ↓
 Answer with source citation
 
+
+---
+
+# 7）更新项目结构
+
+```text
 supportpilot-agent/
 ├── run.py
 ├── data/
@@ -85,22 +91,20 @@ supportpilot-agent/
 │   ├── rag_cases.jsonl
 │   ├── run_rag_eval.py
 │   ├── workflow_cases.jsonl
-│   └── run_workflow_eval.py
+│   ├── run_workflow_eval.py
+│   ├── hitl_cases.jsonl
+│   └── run_hitl_eval.py
 ├── src/
 │   └── supportpilot/
 │       ├── agent.py
 │       ├── config.py
 │       ├── db.py
 │       ├── rag/
-│       │   ├── chunker.py
-│       │   ├── ingest.py
-│       │   └── retriever.py
 │       ├── tools/
 │       │   ├── kb_tools.py
 │       │   ├── order_tools.py
 │       │   └── ticket_tools.py
 │       └── workflows/
-│           ├── __init__.py
 │           └── shipping_workflow.py
 ├── .env.example
 ├── .gitignore
@@ -116,7 +120,35 @@ MAX_DISTANCE = 0.7
 
 
 ---
+M6 架构
+```markdown
+## Safety Architecture
 
+```text
+                    ┌──────────────┐
+                    │     User     │
+                    └──────┬───────┘
+                           ↓
+                    ┌──────────────┐
+                    │    Agent     │
+                    └──────┬───────┘
+                           ↓
+                 ┌───────────────────┐
+                 │ Read or Write?    │
+                 └────────┬──────────┘
+                          │
+              ┌───────────┴───────────┐
+              ↓                       ↓
+        Read Operation          Write Operation
+              ↓                       ↓
+       Execute Directly         Approval Required
+                                      ↓
+                                Human Review
+                               ┌──────┴──────┐
+                               ↓             ↓
+                            Approve        Reject
+                               ↓             ↓
+                         Database Write    No Write
 
 
 ```markdown
@@ -189,6 +221,46 @@ Check Existing Open Ticket
 Existing Ticket?
    ├─ Yes → Reuse Ticket
    └─ No  → Create Ticket
+
+## Human-in-the-loop Approval
+
+SupportPilot adds human approval gates for write operations.
+
+Read-only operations can execute directly:
+
+- Query order status
+- Query ticket status
+- Retrieve enterprise knowledge
+
+Write operations require explicit human approval:
+
+- Create support ticket
+- Update ticket status
+- Create shipping-delay ticket from workflow
+
+Approval flow:
+
+```text
+User Request
+    ↓
+Agent / Workflow
+    ↓
+Write Operation Detected
+    ↓
+Approval Required
+    ↓
+Human Decision
+   ├─ approve → Execute Write
+   └─ reject  → Stop Without Write
+
+## Approval Audit Log
+
+Human approval decisions are persisted locally as JSONL:
+
+```text
+data/logs/approval_log.jsonl
+
+
 
 
 

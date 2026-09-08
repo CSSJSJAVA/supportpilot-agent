@@ -6,6 +6,7 @@ from supportpilot.db import (
     update_ticket_status_in_db,
 )
 
+WRITE_APPROVAL_PREFIX = "[APPROVAL_REQUIRED]"
 
 @function_tool
 def create_ticket(
@@ -13,46 +14,33 @@ def create_ticket(
     issue_type: str,
     description: str,
 ) -> str:
-    """为指定订单创建售后工单。"""
-
-    print(
-        f"\n[Tool] 正在创建工单："
-        f"order_id={order_id}, "
-        f"issue_type={issue_type}"
-    )
+    """创建工单前先请求人工审批。"""
 
     order_id = order_id.strip().upper()
     issue_type = issue_type.strip()
     description = description.strip()
 
     if not order_id:
-        return "创建工单失败：订单号不能为空。"
+        return "缺少订单号。"
 
     if not issue_type:
-        return "创建工单失败：问题类型不能为空。"
+        return "缺少问题类型。"
 
     if not description:
-        return "创建工单失败：问题描述不能为空。"
+        return "缺少问题描述。"
 
     order = get_order_from_db(order_id)
 
     if order is None:
-        return "创建工单失败：未找到对应订单。"
+        return f"未找到订单 {order_id}。"
 
-    ticket_id = create_ticket_in_db(
-        order_id=order_id,
-        issue_type=issue_type,
-        description=description,
+    return (
+        f"{WRITE_APPROVAL_PREFIX}\n"
+        f"action=create_ticket\n"
+        f"order_id={order_id}\n"
+        f"issue_type={issue_type}\n"
+        f"description={description}"
     )
-
-    result = (
-        f"工单创建成功。"
-        f"工单编号：T{ticket_id:04d}。"
-    )
-
-    print(f"[Tool] {result}")
-
-    return result
 
 
 @function_tool
@@ -103,57 +91,42 @@ def update_ticket_status(
     ticket_id: str,
     new_status: str,
 ) -> str:
-    """更新售后工单状态。"""
-
-    print(
-        f"\n[Tool] 收到工单状态更新请求："
-        f"ticket_id={ticket_id}, "
-        f"new_status={new_status}"
-    )
+    """修改工单状态前先请求人工审批。"""
 
     ticket_id = ticket_id.strip().upper()
     new_status = new_status.strip()
 
-    if not ticket_id:
-        return "更新失败：工单编号不能为空。"
-
-    if not ticket_id.startswith("T"):
-        return "更新失败：工单编号格式不正确，请提供类似 T0001 的工单编号。"
-
-    number_part = ticket_id[1:]
-
-    if not number_part.isdigit():
-        return "更新失败：工单编号格式不正确，请提供类似 T0001 的工单编号。"
-
-    allowed_statuses = {
+    allowed_status = [
         "已创建",
         "处理中",
         "已解决",
-    }
+    ]
 
-    if new_status not in allowed_statuses:
+    if not ticket_id.startswith("T"):
+        return "工单号格式不正确，例如 T0001。"
+
+    if new_status not in allowed_status:
         return (
-            "更新失败：不支持该工单状态。"
-            "可选状态为：已创建、处理中、已解决。"
+            "状态不合法，可选状态："
+            "已创建、处理中、已解决。"
         )
 
-    ticket_number = int(number_part)
+    numeric_id = ticket_id[1:]
 
-    ticket = get_ticket_from_db(ticket_number)
+    if not numeric_id.isdigit():
+        return "工单号格式不正确，例如 T0001。"
 
-    if ticket is None:
-        return "更新失败：未找到该工单。"
-
-    updated = update_ticket_status_in_db(
-        ticket_id=ticket_number,
-        new_status=new_status,
+    ticket = get_ticket_from_db(
+        int(numeric_id)
     )
 
-    if not updated:
-        return "更新失败：工单状态未发生变化。"
+    if ticket is None:
+        return f"未找到工单 {ticket_id}。"
 
-    result = f"工单 {ticket_id} 状态已更新为：{new_status}。"
-
-    print(f"[Tool] {result}")
-
-    return result
+    return (
+        f"{WRITE_APPROVAL_PREFIX}\n"
+        f"action=update_ticket_status\n"
+        f"ticket_id={ticket_id}\n"
+        f"old_status={ticket['status']}\n"
+        f"new_status={new_status}"
+    )
