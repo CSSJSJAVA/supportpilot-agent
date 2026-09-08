@@ -6,3 +6,11 @@ __pycache__/
 .vscode/
 # Local SQLite database
 supportpilot.db
+# Local SQLite database
+supportpilot.db
+
+# Local vector database
+data/chroma/
+
+# Local runtime logs
+data/logs/

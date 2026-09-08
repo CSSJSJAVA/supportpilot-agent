@@ -47,19 +47,62 @@ pip install -r requirements.txt
 - Tool input validation
 - Basic conversation history limit
 
-## Project Structure
+## RAG Knowledge Base
+
+SupportPilot currently supports retrieval-augmented generation for enterprise policy questions.
+
+Knowledge base topics include:
+
+- Return and exchange policy
+- Shipping policy
+- Membership policy
+- Refund policy
+
+RAG pipeline:
+
+```text
+User Query
+    ↓
+Knowledge Base Tool
+    ↓
+Retriever
+    ↓
+BGE Chinese Embedding
+    ↓
+ChromaDB
+    ↓
+Relevant Chunks
+    ↓
+SupportPilot Agent
+    ↓
+Answer with source citation
 
 ```text
 supportpilot-agent/
 ├── run.py
+├── data/
+│   └── knowledge/
+│       ├── return_policy.txt
+│       ├── shipping_policy.txt
+│       ├── membership_policy.txt
+│       └── refund_policy.txt
+├── evals/
+│   ├── rag_cases.jsonl
+│   └── run_rag_eval.py
 ├── src/
 │   └── supportpilot/
 │       ├── __init__.py
 │       ├── agent.py
 │       ├── config.py
 │       ├── db.py
+│       ├── rag/
+│       │   ├── __init__.py
+│       │   ├── chunker.py
+│       │   ├── ingest.py
+│       │   └── retriever.py
 │       └── tools/
 │           ├── __init__.py
+│           ├── kb_tools.py
 │           ├── order_tools.py
 │           └── ticket_tools.py
 ├── .env.example
@@ -67,3 +110,61 @@ supportpilot-agent/
 ├── AGENTS.md
 ├── README.md
 └── requirements.txt
+
+Current embedding model:
+BAAI/bge-small-zh-v1.5
+
+Current retrieval threshold:
+MAX_DISTANCE = 0.7
+
+
+---
+
+
+
+```markdown
+## RAG Evaluation
+
+A small baseline evaluation set is used to validate retrieval quality.
+
+Current baseline results:
+
+| Metric | Result |
+|---|---:|
+| Top1 Accuracy | 100% (4/4) |
+| Recall@3 | 100% (4/4) |
+| No-answer Accuracy | 100% (1/1) |
+
+These results are based on a small smoke-test dataset and should not be interpreted as production-level accuracy.
+
+Evaluation cases currently cover:
+
+- Refund timing
+- Return eligibility
+- Shipping timing
+- Membership benefits
+- Out-of-domain / no-answer questions
+
+## RAG Optimization Notes
+
+The first RAG prototype used ChromaDB's default embedding model.
+
+Baseline result:
+
+- Top1 Accuracy: 75%
+- Recall@3: 100%
+- No-answer Accuracy: 100%
+
+Several retrieval improvements were tested:
+
+1. Fixed-size character chunking
+2. Paragraph-based chunking
+3. Title + paragraph chunking
+4. Chinese embedding model replacement
+5. Similarity threshold calibration
+
+After switching to:
+
+```text
+BAAI/bge-small-zh-v1.5
+
