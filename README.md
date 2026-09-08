@@ -77,34 +77,31 @@ SupportPilot Agent
     ↓
 Answer with source citation
 
-```text
 supportpilot-agent/
 ├── run.py
 ├── data/
 │   └── knowledge/
-│       ├── return_policy.txt
-│       ├── shipping_policy.txt
-│       ├── membership_policy.txt
-│       └── refund_policy.txt
 ├── evals/
 │   ├── rag_cases.jsonl
-│   └── run_rag_eval.py
+│   ├── run_rag_eval.py
+│   ├── workflow_cases.jsonl
+│   └── run_workflow_eval.py
 ├── src/
 │   └── supportpilot/
-│       ├── __init__.py
 │       ├── agent.py
 │       ├── config.py
 │       ├── db.py
 │       ├── rag/
-│       │   ├── __init__.py
 │       │   ├── chunker.py
 │       │   ├── ingest.py
 │       │   └── retriever.py
-│       └── tools/
+│       ├── tools/
+│       │   ├── kb_tools.py
+│       │   ├── order_tools.py
+│       │   └── ticket_tools.py
+│       └── workflows/
 │           ├── __init__.py
-│           ├── kb_tools.py
-│           ├── order_tools.py
-│           └── ticket_tools.py
+│           └── shipping_workflow.py
 ├── .env.example
 ├── .gitignore
 ├── AGENTS.md
@@ -167,4 +164,31 @@ After switching to:
 
 ```text
 BAAI/bge-small-zh-v1.5
+
+## Shipping Exception Workflow
+
+SupportPilot includes a deterministic workflow for handling shipping-delay cases.
+
+Workflow:
+
+```text
+User / Agent Trigger
+        ↓
+Check Order
+        ↓
+Retrieve Shipping Policy
+        ↓
+Evaluate Shipping Delay
+        ↓
+Is Overdue?
+   ├─ No → Finish
+   └─ Yes
+        ↓
+Check Existing Open Ticket
+        ↓
+Existing Ticket?
+   ├─ Yes → Reuse Ticket
+   └─ No  → Create Ticket
+
+
 
