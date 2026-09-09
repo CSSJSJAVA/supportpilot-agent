@@ -1,6 +1,193 @@
 # SupportPilot
 
-SupportPilot 是一个面向企业客户支持场景的 AI Agent 作品集项目。它计划帮助支持团队更快地理解客户问题、查找信息并生成合适的回复。
+企业智能客服 Agent：结合 Tool Calling、RAG、确定性 Workflow、HITL、Observability 与 Multi-layer Eval，构建可控、可审计、可评估的客服自动化系统。
+
+## Project Highlights
+
+### 1. Agent Tool Calling
+
+SupportPilot 使用 Agent Tool Calling 连接真实业务能力，而不是只让大模型进行文本问答。
+
+目前支持：
+
+- 查询订单状态
+- 查询工单状态
+- 创建售后工单
+- 修改工单状态
+- 查询企业知识库
+
+Agent 负责理解用户意图，业务数据由 Tool 和 SQLite 提供，避免模型自行编造订单和工单信息。
+
+### 2. Enterprise RAG
+
+针对退换货、物流、退款和会员政策构建企业知识库。
+
+RAG Pipeline：
+
+```text
+User Query
+→ BGE Chinese Embedding
+→ ChromaDB Retrieval
+→ Similarity Threshold
+→ Relevant Knowledge Chunks
+→ Agent Answer + Source Citation
+
+BAAI/bge-small-zh-v1.5
+```
+
+## Why SupportPilot
+
+传统大模型客服虽然具备自然语言理解能力，但在企业场景中仍存在几个关键问题：
+
+- 容易基于模型记忆回答企业政策，存在幻觉风险
+- 写操作缺少权限控制，可能直接修改业务数据
+- 多步骤任务依赖自由 Agent Loop，流程稳定性不足
+- 缺少可观测性，难以定位失败步骤
+- 缺少系统化 Eval，无法判断版本是否出现回归
+
+SupportPilot 的目标是将 LLM 的语言能力与企业业务规则、知识库、人工审批和评估体系结合，构建一个更可控的企业客服 Agent。
+
+## Architecture
+```mermaid
+flowchart TD
+    U[User] --> R[Intent Router]
+
+    R -->|物流异常处理| W[Shipping Workflow]
+    R -->|普通咨询/业务请求| A[SupportPilot Agent]
+
+    A --> TC[Tool Calling]
+
+    TC --> OT[Order Tools]
+    TC --> TT[Ticket Tools]
+    TC --> KB[Knowledge Base Tool]
+
+    OT --> DB[(SQLite)]
+    TT --> HITL[HITL Approval Gate]
+
+    HITL -->|Approve| DB
+    HITL -->|Reject| STOP[No Database Write]
+
+    KB --> RET[Retriever]
+    RET --> EMB[BGE Chinese Embedding]
+    EMB --> CHROMA[(ChromaDB)]
+    CHROMA --> DOC[Enterprise Knowledge Base]
+
+    W --> WO[Check Order]
+    WO --> WP[Retrieve Shipping Policy]
+    WP --> WR[Deterministic Business Rule]
+    WR --> WI[Idempotency Check]
+
+    WI -->|Existing Ticket| DB
+    WI -->|Need New Ticket| WH[Workflow HITL]
+
+    WH -->|Approve| DB
+    WH -->|Reject| STOP
+
+    A --> OBS[Observability]
+    W --> OBS
+    HITL --> OBS
+    WH --> OBS
+
+    OBS --> LOG[Trace / Approval / Failure Logs]
+
+    LOG --> EVAL[Multi-layer Eval]
+    EVAL --> GATE[Quality Gate]
+    GATE --> RELEASE[Release Gate]
+```
+
+```mermaid
+flowchart TD
+    U[用户输入] --> I{意图判断}
+
+    I -->|普通问答| A[Agent]
+    I -->|物流异常| W[Shipping Workflow]
+
+    A --> J{请求类型}
+
+    J -->|订单查询| O[Order Tool]
+    J -->|政策问题| K[RAG Knowledge Tool]
+    J -->|工单查询| T[Ticket Read Tool]
+    J -->|写操作| H[HITL Approval]
+
+    O --> R[生成回答]
+    K --> R
+    T --> R
+
+    H --> D{人工决策}
+    D -->|Reject| N[不执行写操作]
+    D -->|Approve| DB[(SQLite Write)]
+    DB --> R
+
+    W --> W1[查询订单]
+    W1 --> W2[RAG 查询物流政策]
+    W2 --> W3[确定性超时判断]
+    W3 --> W4{是否超时}
+
+    W4 -->|No| R
+    W4 -->|Yes| W5{是否已有工单}
+
+    W5 -->|Yes| W6[复用已有工单]
+    W5 -->|No| WH[HITL Approval]
+
+    W6 --> R
+
+    WH --> WD{人工决策}
+    WD -->|Reject| N
+    WD -->|Approve| DB
+```
+
+## Design Principles
+
+SupportPilot follows several design principles for enterprise Agent systems:
+
+1. **LLM for understanding, code for deterministic rules**
+   大模型负责自然语言理解，确定性业务规则由 Python 执行。
+
+2. **Tools for business data, not model memory**
+   订单、工单等业务信息必须通过 Tool 获取。
+
+3. **RAG for enterprise knowledge**
+   企业政策必须基于知识库检索，不允许模型凭常识编造。
+
+4. **Human approval before high-impact writes**
+   创建工单、修改状态等写操作必须经过 HITL。
+
+5. **Observable before autonomous**
+   Workflow、审批、失败案例均保留可观测记录。
+
+6. **Evaluate before release**
+   版本只有通过全部 Quality Gates 后，Release Gate 才标记为 READY。
+
+
+
+## Current Evaluation Results
+
+| Eval Suite | Result |
+|---|---:|
+| RAG Retrieval | PASS |
+| Workflow Logic | PASS |
+| HITL Safety | PASS |
+| Agent Tool Selection | PASS |
+| Intent Routing | PASS |
+
+**Overall:** 5/5 suites passed
+**Release Gate:** READY
+
+> Results are based on the current controlled smoke-test and regression dataset, not production-level accuracy.
+
+## Tech Stack
+
+- Python 3.12
+- OpenAI Agents SDK
+- DeepSeek OpenAI-compatible API
+- SQLite
+- ChromaDB
+- BAAI/bge-small-zh-v1.5
+- sentence-transformers
+- pytest / custom Eval scripts
+- JSONL-based observability logs
+
+
 
 ## 目标用户
 
@@ -13,7 +200,7 @@ SupportPilot 是一个面向企业客户支持场景的 AI Agent 作品集项目
 
 构建一个可靠、可评估、能够与人工客服协作的企业客户支持 AI Agent，从而提升问题处理效率和回复质量。
 
-## 计划中的能力
+## 当前能力
 
 - **Agent**：理解客户问题并组织处理步骤。
 - **Tool Calling**：调用知识库或其他业务工具获取信息。
@@ -21,9 +208,6 @@ SupportPilot 是一个面向企业客户支持场景的 AI Agent 作品集项目
 - **Human-in-the-loop**：在需要时交由人工审核或接管。
 - **Evaluation**：评估回答的准确性、相关性和安全性。
 
-## 当前状态
-
-项目目前处于环境设置和项目初始化阶段，暂未实现 Agent 或业务功能。
 
 ## Python 环境
 
@@ -35,17 +219,18 @@ pip install -r requirements.txt
 
 开发时请根据 `.env.example` 创建本地 `.env` 文件，并填写自己的 API key。不要把真实密钥提交到代码仓库。
 
-## Current Capabilities
+启动交互式客服 Agent：
 
-- Multi-turn terminal conversation
-- DeepSeek model via OpenAI-compatible API
-- Order lookup
-- Ticket creation
-- Ticket status lookup
-- Ticket status update
-- SQLite business data
-- Tool input validation
-- Basic conversation history limit
+```bash
+python run.py
+```
+
+运行完整评测：
+
+```bash
+python evals/run_all_evals.py
+```
+
 
 ## RAG Knowledge Base
 
@@ -80,7 +265,6 @@ Answer with source citation
 
 ---
 
-# 7）更新项目结构
 
 ```text
 supportpilot-agent/
@@ -93,7 +277,14 @@ supportpilot-agent/
 │   ├── workflow_cases.jsonl
 │   ├── run_workflow_eval.py
 │   ├── hitl_cases.jsonl
-│   └── run_hitl_eval.py
+│   ├── run_hitl_eval.py
+│   ├── agent_tool_cases.jsonl
+│   ├── run_agent_tool_eval.py
+│   ├── route_cases.jsonl
+│   ├── run_route_eval.py
+│   ├── eval_logging.py
+│   ├── run_all_evals.py
+│   └── eval_report.md
 ├── src/
 │   └── supportpilot/
 │       ├── agent.py
@@ -192,8 +383,6 @@ All suites can be executed through a single command:
 python evals/run_all_evals.py
 
 
-继续追加：
-
 ```markdown
 ## Quality Gates
 
@@ -234,8 +423,6 @@ Baseline result:
 Every full evaluation run records a regression summary in:
 
 
-然后加入自动报告：
-
 ```markdown
 ## Evaluation Report
 
@@ -245,7 +432,6 @@ Each unified evaluation run automatically generates:
 evals/eval_report.md
 
 
-再加 Release Gate：
 
 ```markdown
 ## Release Gate
@@ -258,7 +444,6 @@ The current version is marked:
 READY
 
 
-再加一个总架构图：
 
 ```markdown
 ## Evaluation Architecture
@@ -364,8 +549,6 @@ Human approval decisions are persisted locally as JSONL:
 
 ```text
 data/logs/approval_log.jsonl
-
-
 
 
 
