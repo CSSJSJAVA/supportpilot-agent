@@ -174,6 +174,50 @@ Evaluation cases currently cover:
 - Membership benefits
 - Out-of-domain / no-answer questions
 
+## Evaluation System
+
+SupportPilot includes a multi-layer evaluation system covering retrieval quality, workflow correctness, HITL safety, Agent tool selection, and intent routing.
+
+Current evaluation suites:
+
+- RAG Eval
+- Workflow Eval
+- HITL Eval
+- Agent Tool Calling Eval
+- Intent Route Eval
+
+All suites can be executed through a single command:
+
+```bash
+python evals/run_all_evals.py
+
+
+继续追加：
+
+```markdown
+## Quality Gates
+
+Each evaluation suite has an explicit regression quality gate.
+
+Current smoke-test gates:
+
+| Eval Suite | Quality Gate |
+|---|---|
+| RAG Eval | Top1 Accuracy = 100%, Recall@3 = 100%, No-answer Accuracy = 100% |
+| Workflow Eval | Accuracy = 100% |
+| HITL Eval | Accuracy = 100% |
+| Agent Tool Eval | Accuracy = 100% |
+| Intent Route Eval | Accuracy = 100% |
+
+These strict thresholds are used as regression gates for the current small controlled test set. They should not be interpreted as production-level performance guarantees.
+
+## Failure Case Tracking
+
+Failed evaluation cases are automatically recorded in:
+
+```text
+data/logs/eval_failures.jsonl
+
 ## RAG Optimization Notes
 
 The first RAG prototype used ChromaDB's default embedding model.
@@ -183,6 +227,67 @@ Baseline result:
 - Top1 Accuracy: 75%
 - Recall@3: 100%
 - No-answer Accuracy: 100%
+
+```markdown
+## Regression History
+
+Every full evaluation run records a regression summary in:
+
+
+然后加入自动报告：
+
+```markdown
+## Evaluation Report
+
+Each unified evaluation run automatically generates:
+
+```text
+evals/eval_report.md
+
+
+再加 Release Gate：
+
+```markdown
+## Release Gate
+
+SupportPilot includes a project-level release gate.
+
+The current version is marked:
+
+```text
+READY
+
+
+再加一个总架构图：
+
+```markdown
+## Evaluation Architecture
+
+```text
+Test Cases
+    ↓
+Individual Eval Suites
+    ├─ RAG Eval
+    ├─ Workflow Eval
+    ├─ HITL Eval
+    ├─ Agent Tool Eval
+    └─ Intent Route Eval
+    ↓
+Suite Quality Gates
+    ↓
+Unified Eval Runner
+    ↓
+Overall Regression
+    ├─ Failure Case Log
+    ├─ Regression History
+    └─ eval_report.md
+    ↓
+Release Gate
+    ├─ READY
+    └─ NOT READY
+
+```text
+data/logs/eval_regression.jsonl
 
 Several retrieval improvements were tested:
 

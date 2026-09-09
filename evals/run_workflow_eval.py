@@ -1,7 +1,9 @@
 import json
 import sys
 from pathlib import Path
+from eval_logging import log_eval_failure
 
+MIN_WORKFLOW_ACCURACY = 1.0
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT_DIR / "src"
@@ -70,6 +72,25 @@ def evaluate_case(case: dict) -> bool:
     passed = all(
         checks.values()
     )
+    if not passed:
+        log_eval_failure(
+        suite="workflow",
+        case=order_id,
+        expected={
+            "order_found": case["expected_order_found"],
+            "is_overdue": case["expected_overdue"],
+            "has_ticket": case["expected_ticket"],
+        },
+        actual={
+            "order_found": state.order_found,
+            "is_overdue": state.is_overdue,
+            "has_ticket": actual_has_ticket,
+            "current_step": state.current_step,
+        },
+        details={
+            "error": state.error,
+        },
+    )
 
     print()
     print("-" * 50)
@@ -131,6 +152,16 @@ def main() -> None:
         f"{accuracy:.2%}"
     )
 
+    print()
+    print("=" * 50)
+    print("Workflow Quality Gate")
+    print("=" * 50)
+
+    if accuracy >= MIN_WORKFLOW_ACCURACY:
+        print("Status: PASS")
+    else:
+        print("Status: FAIL")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

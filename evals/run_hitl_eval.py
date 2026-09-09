@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -13,16 +12,15 @@ sys.path.insert(
 )
 
 
-from supportpilot.db import (
-    create_ticket_in_db,
-    get_ticket_from_db,
-    init_db,
-    update_ticket_status_in_db,
-)
+from supportpilot.rag.retriever import search_knowledge_base
 
 
-CASES_PATH = ROOT_DIR / "evals" / "hitl_cases.jsonl"
-DB_PATH = ROOT_DIR / "supportpilot.db"
+CASES_PATH = ROOT_DIR / "evals" / "rag_cases.jsonl"
+
+
+MIN_TOP1_ACCURACY = 1.0
+MIN_RECALL_AT_3 = 1.0
+MIN_NO_ANSWER_ACCURACY = 1.0
 
 
 def load_cases() -> list[dict]:
@@ -45,231 +43,148 @@ def load_cases() -> list[dict]:
     return cases
 
 
-def count_matching_tickets(
-    order_id: str,
-    issue_type: str,
-    description: str,
-) -> int:
-    conn = sqlite3.connect(DB_PATH)
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM tickets
-        WHERE order_id = ?
-          AND issue_type = ?
-          AND description = ?
-        """,
-        (
-            order_id,
-            issue_type,
-            description,
-        ),
-    )
-
-    count = cursor.fetchone()[0]
-
-    conn.close()
-
-    return count
-
-
-def evaluate_create_ticket(case: dict) -> bool:
-    before_count = count_matching_tickets(
-        order_id=case["order_id"],
-        issue_type=case["issue_type"],
-        description=case["description"],
-    )
-
-    if case["decision"] == "approve":
-        create_ticket_in_db(
-            order_id=case["order_id"],
-            issue_type=case["issue_type"],
-            description=case["description"],
-        )
-
-    after_count = count_matching_tickets(
-        order_id=case["order_id"],
-        issue_type=case["issue_type"],
-        description=case["description"],
-    )
-
-    if case["decision"] == "reject":
-        passed = after_count == before_count
-    else:
-        passed = after_count == before_count + 1
-
-    print()
-    print("-" * 50)
-    print(f"Case: {case['case']}")
-    print(f"Decision: {case['decision']}")
-    print(f"Before count: {before_count}")
-    print(f"After count: {after_count}")
-    print(
-        f"Result: {'PASS' if passed else 'FAIL'}"
-    )
-
-    return passed
-
-
-def evaluate_update_status(case: dict) -> bool:
-    numeric_id = int(
-        case["ticket_id"][1:]
-    )
-
-    before_ticket = get_ticket_from_db(
-        numeric_id
-    )
-
-    if before_ticket is None:
-        print()
-        print("-" * 50)
-        print(f"Case: {case['case']}")
-        print("Result: FAIL")
-        print("Reason: ticket not found")
-        return False
-
-    before_status = before_ticket["status"]
-
-    if case["decision"] == "approve":
-        update_ticket_status_in_db(
-            numeric_id,
-            case["new_status"],
-        )
-
-    after_ticket = get_ticket_from_db(
-        numeric_id
-    )
-
-    after_status = after_ticket["status"]
-
-    if case["decision"] == "reject":
-        passed = after_status == before_status
-    else:
-        passed = after_status == case["new_status"]
-
-    print()
-    print("-" * 50)
-    print(f"Case: {case['case']}")
-    print(f"Decision: {case['decision']}")
-    print(f"Before status: {before_status}")
-    print(f"After status: {after_status}")
-    print(
-        f"Result: {'PASS' if passed else 'FAIL'}"
-    )
-
-    return passed
-
-
-def evaluate_read_only() -> bool:
-    """验证只读操作本身不会修改数据库。"""
-
-    conn = sqlite3.connect(DB_PATH)
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM tickets
-        """
-    )
-
-    before_count = cursor.fetchone()[0]
-
-    cursor.execute(
-        """
-        SELECT *
-        FROM orders
-        WHERE order_id = ?
-        """,
-        ("A1002",),
-    )
-
-    cursor.fetchone()
-
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM tickets
-        """
-    )
-
-    after_count = cursor.fetchone()[0]
-
-    conn.close()
-
-    passed = before_count == after_count
-
-    print()
-    print("-" * 50)
-    print("Case: read_only_no_write")
-    print(f"Before ticket count: {before_count}")
-    print(f"After ticket count: {after_count}")
-    print(
-        f"Result: {'PASS' if passed else 'FAIL'}"
-    )
-
-    return passed
-
-
-def main() -> None:
-    init_db()
-
+def run_eval() -> None:
     cases = load_cases()
 
-    passed_count = 0
-    total_count = 0
+    top1_correct = 0
+    recall_at_3_correct = 0
+    positive_total = 0
+
+    no_answer_correct = 0
+    no_answer_total = 0
+
+    print("=" * 50)
+    print("RAG Eval")
+    print("=" * 50)
 
     for case in cases:
-        total_count += 1
+        query = case["query"]
+        expected_source = case["expected_source"]
 
-        if case["action"] == "create_ticket":
-            passed = evaluate_create_ticket(
-                case
-            )
+        results = search_knowledge_base(
+            query=query,
+            top_k=3,
+        )
 
-        elif case["action"] == "update_ticket_status":
-            passed = evaluate_update_status(
-                case
-            )
+        top1_source = (
+            results[0]["source"]
+            if results
+            else None
+        )
 
-        else:
+        top3_sources = [
+            item["source"]
+            for item in results
+        ]
+
+        print()
+        print("-" * 50)
+        print(f"Query: {query}")
+        print(f"Expected: {expected_source}")
+        print(f"Top1: {top1_source}")
+        print(f"Top3: {top3_sources}")
+
+        if expected_source is None:
+            no_answer_total += 1
+
+            passed = top1_source is None
+
+            if passed:
+                no_answer_correct += 1
+
             print(
-                f"Unknown action: "
-                f"{case['action']}"
+                f"No-answer: "
+                f"{'PASS' if passed else 'FAIL'}"
             )
-            passed = False
 
-        if passed:
-            passed_count += 1
+            continue
 
-    total_count += 1
+        positive_total += 1
 
-    if evaluate_read_only():
-        passed_count += 1
+        top1_passed = (
+            top1_source
+            == expected_source
+        )
 
-    accuracy = (
-        passed_count / total_count
-        if total_count
+        recall_passed = (
+            expected_source
+            in top3_sources
+        )
+
+        if top1_passed:
+            top1_correct += 1
+
+        if recall_passed:
+            recall_at_3_correct += 1
+
+        print(
+            f"Top1: "
+            f"{'PASS' if top1_passed else 'FAIL'}"
+        )
+
+        print(
+            f"Recall@3: "
+            f"{'PASS' if recall_passed else 'FAIL'}"
+        )
+
+    top1_accuracy = (
+        top1_correct / positive_total
+        if positive_total
+        else 0
+    )
+
+    recall_at_3 = (
+        recall_at_3_correct / positive_total
+        if positive_total
+        else 0
+    )
+
+    no_answer_accuracy = (
+        no_answer_correct / no_answer_total
+        if no_answer_total
         else 0
     )
 
     print()
     print("=" * 50)
-    print("HITL Eval Summary")
+    print("RAG Eval Summary")
     print("=" * 50)
+
     print(
-        f"Passed: "
-        f"{passed_count}/{total_count}"
+        f"Top1 Accuracy: "
+        f"{top1_correct}/{positive_total} "
+        f"= {top1_accuracy:.2%}"
     )
+
     print(
-        f"Accuracy: "
-        f"{accuracy:.2%}"
+        f"Recall@3: "
+        f"{recall_at_3_correct}/{positive_total} "
+        f"= {recall_at_3:.2%}"
     )
+
+    print(
+        f"No-answer Accuracy: "
+        f"{no_answer_correct}/{no_answer_total} "
+        f"= {no_answer_accuracy:.2%}"
+    )
+
+    quality_gate_passed = (
+        top1_accuracy >= MIN_TOP1_ACCURACY
+        and recall_at_3 >= MIN_RECALL_AT_3
+        and no_answer_accuracy >= MIN_NO_ANSWER_ACCURACY
+    )
+
+    print()
+    print("=" * 50)
+    print("RAG Quality Gate")
+    print("=" * 50)
+
+    if quality_gate_passed:
+        print("Status: PASS")
+    else:
+        print("Status: FAIL")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    run_eval()
